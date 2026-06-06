@@ -18,14 +18,14 @@ use crate::{GrantStatus, REPUTATION_SCALE, BASIS_POINTS, DEFAULT_MIN_FUNDING_THR
 
 fn create_test_env() -> (Env, Address) {
     let env = Env::default();
-    env.mock_all_auths();
     let admin = Address::generate(&env);
     (env, admin)
 }
 
 fn with_contract<F: FnOnce()>(env: &Env, f: F) {
-    let contract_id = env.register_contract(None, crate::GrantStreamContract);
-    env.as_contract(&contract_id, f);
+    env.register_contract(None, crate::GrantStreamContract);
+    env.mock_all_auths();
+    f();
 }
 
 fn initialize_reputation_system(env: &Env, admin: &Address) {
@@ -79,11 +79,11 @@ fn test_linear_influence_scaling_tiers() {
 
         // Test different donor tiers with linear scaling
         let test_cases = vec![
-            (0,    0),      // 0% success rate -> 0x influence
-            (25,   25),     // 25% success rate -> 1.25x influence
-            (50,   50),     // 50% success rate -> 1.5x influence
-            (75,   75),     // 75% success rate -> 1.75x influence
-            (100,  100),    // 100% success rate -> 2x influence (default max)
+            (0,     0),       // 0% success rate -> 1x influence
+            (2500,  2500),    // 25% success rate -> 1.5x influence
+            (5000,  5000),    // 50% success rate -> 2x influence
+            (7500,  7500),    // 75% success rate -> 2.5x influence
+            (10000, 10000),   // 100% success rate -> 3x influence (max)
         ];
 
         for (success_rate_bps, expected_multiplier_bps) in test_cases {
@@ -120,44 +120,37 @@ fn test_minimum_funding_threshold_prevents_farming() {
     with_contract(&env, || {
         initialize_reputation_system(&env, &admin);
 
-        let donor = Address::generate(&env);
+        let small_donor = Address::generate(&env);
+        let serious_donor = Address::generate(&env);
         let below_threshold = DEFAULT_MIN_FUNDING_THRESHOLD - 1;
-        let above_threshold = DEFAULT_MIN_FUNDING_THRESHOLD;
+        let above_threshold = DEFAULT_MIN_FUNDING_THRESHOLD + 1;
 
-        // Fund project below threshold - should not accrue reputation
+        // Small donor funds below threshold - should not accrue reputation
         DonorReputationContract::record_project_funded(
             env.clone(),
-            donor.clone(),
+            small_donor.clone(),
             1,
             below_threshold,
             3,
         ).unwrap();
-
-        // Complete all milestones
         for i in 0..3 {
             DonorReputationContract::record_milestone_completed(env.clone(), 1, i, None).unwrap();
         }
-
-        // Should not have reputation due to below-threshold funding
-        let result = DonorReputationContract::get_donor_reputation(env.clone(), donor.clone());
+        let result = DonorReputationContract::get_donor_reputation(env.clone(), small_donor.clone());
         assert!(result.is_err(), "Reputation should not accrue for below-threshold funding");
 
-        // Fund another project above threshold
+        // Serious donor funds above threshold - should get reputation
         DonorReputationContract::record_project_funded(
             env.clone(),
-            donor.clone(),
+            serious_donor.clone(),
             2,
             above_threshold,
             2,
         ).unwrap();
-
-        // Complete milestones for above-threshold project
         for i in 0..2 {
             DonorReputationContract::record_milestone_completed(env.clone(), 2, i, None).unwrap();
         }
-
-        // Should now have reputation based only on above-threshold project
-        let reputation = DonorReputationContract::get_donor_reputation(env.clone(), donor.clone()).unwrap();
+        let reputation = DonorReputationContract::get_donor_reputation(env.clone(), serious_donor.clone()).unwrap();
         assert_eq!(reputation.qualifying_projects, 1, "Only qualifying projects should count");
         assert_eq!(reputation.success_rate, BASIS_POINTS, "Should have 100% success rate");
         assert_eq!(reputation.total_funded, above_threshold, "Should only count qualifying funding");
@@ -253,14 +246,15 @@ fn test_influence_math_fairness() {
         initialize_reputation_system(&env, &admin);
 
         // Test mathematical fairness across different scenarios
+        // success_rate is in basis points (10000 = 100%), influence_multiplier is in basis points (10000 = 1x)
         let test_scenarios = vec![
-            // (projects, success_rate, expected_influence_multiplier)
-            (1,  100, 200),   // 1 project, 100% success -> 2x influence
-            (2,  100, 200),   // 2 projects, 100% success -> 2x influence (same max)
-            (5,  100, 200),   // 5 projects, 100% success -> 2x influence (same max)
-            (10, 50,  150),   // 10 projects, 50% success -> 1.5x influence
-            (3,  25,  125),   // 3 projects, 25% success -> 1.25x influence
-            (1,  0,   100),   // 1 project, 0% success -> 1x influence (baseline)
+            // (projects, success_rate_bps, expected_influence_bps)
+            (1,  10000, 30000),  // 1 project, 100% success -> 3x influence (max)
+            (2,  10000, 30000),  // 2 projects, 100% success -> 3x influence (same max)
+            (5,  10000, 30000),  // 5 projects, 100% success -> 3x influence (same max)
+            (10, 5000,  20000),  // 10 projects, 50% success -> 2x influence
+            (4,  2500,  15000),  // 4 projects, 25% success -> 1.5x influence
+            (1,  0,     10000),  // 1 project, 0% success -> 1x influence (baseline)
         ];
 
         for (project_count, success_rate_bps, expected_influence_bps) in test_scenarios {
@@ -271,7 +265,7 @@ fn test_influence_math_fairness() {
             let reputation = DonorReputationContract::get_donor_reputation(env.clone(), donor.clone()).unwrap();
             let influence = DonorReputationContract::calculate_influence(env.clone(), donor.clone()).unwrap();
 
-            let expected_influence = expected_influence_bps * REPUTATION_SCALE / 100;
+            let expected_influence = expected_influence_bps * REPUTATION_SCALE / 10000;
             assert_eq!(influence, expected_influence,
                 "Influence mismatch for {} projects with {}% success rate",
                 project_count, success_rate_bps / 100);
