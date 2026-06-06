@@ -11,19 +11,21 @@
 extern crate std;
 
 use std::println;
-use soroban_sdk::{Address, Env, vec, Vec, testutils::{Address as _, Ledger}};
+use soroban_sdk::{token, Address, Env, vec, Vec, testutils::{Address as _, Ledger}};
 use crate::donor_reputation::*;
 use crate::matching_pool::*;
 use crate::{GrantStatus, REPUTATION_SCALE, BASIS_POINTS, DEFAULT_MIN_FUNDING_THRESHOLD, MAX_REPUTATION_MULTIPLIER, FIXED_POINT_SCALE};
 
 fn create_test_env() -> Env {
     let env = Env::default();
+    env.register_contract(None, crate::GrantStreamContract);
+    env.mock_all_auths();
     env
 }
 
 fn setup_reputation_and_matching(env: &Env) -> (Address, Address) {
     let admin = Address::generate(env);
-    let token = Address::generate(env);
+    let token = env.register_stellar_asset_contract_v2(admin.clone());
 
     // Initialize reputation system
     DonorReputationContract::initialize(env.clone(), admin.clone()).unwrap();
@@ -86,9 +88,13 @@ fn test_high_reputation_donor_larger_match() {
     let donation_amount = 50_000_000; // 5 USDC
     let project_id = 1;
 
-    // Make donations
+    // Mint tokens to donors and make donations
+    let token_admin = token::StellarAssetClient::new(&env, &token);
+    token_admin.mint(&perfect_donor, &donation_amount);
     MatchingPoolContract::donate(env.clone(), 1, project_id, perfect_donor.clone(), donation_amount).unwrap();
+    token_admin.mint(&average_donor, &donation_amount);
     MatchingPoolContract::donate(env.clone(), 1, project_id, average_donor.clone(), donation_amount).unwrap();
+    token_admin.mint(&poor_donor, &donation_amount);
     MatchingPoolContract::donate(env.clone(), 1, project_id, poor_donor.clone(), donation_amount).unwrap();
 
     // Fast forward to end of round
@@ -143,13 +149,16 @@ fn test_self_optimizing_matching_rounds() {
 
     // Both projects get same number of donations from their respective donors
     let donation_amount = 30_000_000; // 3 USDC each
+    let token_admin = token::StellarAssetClient::new(&env, &token);
     
     // High-quality project: 3 donations from high-reputation donor
+    token_admin.mint(&high_quality_donor, &(donation_amount * 3));
     for i in 0..3 {
         MatchingPoolContract::donate(env.clone(), 1, 1, high_quality_donor.clone(), donation_amount).unwrap();
     }
 
     // Low-quality project: 3 donations from low-reputation donor  
+    token_admin.mint(&low_quality_donor, &(donation_amount * 3));
     for i in 0..3 {
         MatchingPoolContract::donate(env.clone(), 1, 2, low_quality_donor.clone(), donation_amount).unwrap();
     }
@@ -219,10 +228,13 @@ fn test_reputation_farming_structural_block() {
 
     // Now test in matching pool - even with max reputation, can't get unlimited advantage
     let donation_amount = 100_000_000; // 10 USDC
+    let token_admin = token::StellarAssetClient::new(&env, &token);
+    token_admin.mint(&farmer, &donation_amount);
     MatchingPoolContract::donate(env.clone(), 1, 1, farmer.clone(), donation_amount).unwrap();
 
     // Create a legitimate high-quality donor for comparison
     let legitimate_donor = create_donor_with_reputation(&env, 100 * BASIS_POINTS / 100, 3);
+    token_admin.mint(&legitimate_donor, &donation_amount);
     MatchingPoolContract::donate(env.clone(), 1, 2, legitimate_donor.clone(), donation_amount).unwrap();
 
     // Fast forward and calculate matching
@@ -304,11 +316,14 @@ fn test_financial_barriers_to_reputation_farming() {
 
     // Test in matching pool
     let donation_amount = 50_000_000;
+    let token_admin = token::StellarAssetClient::new(&env, &token);
     
     // Poor attacker's donation should have baseline influence
+    token_admin.mint(&poor_attacker, &donation_amount);
     MatchingPoolContract::donate(env.clone(), 1, 1, poor_attacker.clone(), donation_amount).unwrap();
     
     // Rich donor's donation should have maximum influence
+    token_admin.mint(&rich_donor, &donation_amount);
     MatchingPoolContract::donate(env.clone(), 1, 2, rich_donor.clone(), donation_amount).unwrap();
 
     env.ledger().with_mut(|li| { li.timestamp = env.ledger().timestamp() + 86401; });
@@ -377,9 +392,13 @@ fn test_incentive_alignment() {
     // All donate to the same promising project
     let project_id = 1;
     let donation_amount = 40_000_000; // 4 USDC each
+    let token_admin = token::StellarAssetClient::new(&env, &token);
 
+    token_admin.mint(&diligent_donor, &donation_amount);
     MatchingPoolContract::donate(env.clone(), 1, project_id, diligent_donor.clone(), donation_amount).unwrap();
+    token_admin.mint(&careless_donor, &donation_amount);
     MatchingPoolContract::donate(env.clone(), 1, project_id, careless_donor.clone(), donation_amount).unwrap();
+    token_admin.mint(&new_donor, &donation_amount);
     MatchingPoolContract::donate(env.clone(), 1, project_id, new_donor.clone(), donation_amount).unwrap();
 
     // Fast forward and calculate matching
