@@ -87,7 +87,10 @@ fn test_prune_finalized_grant_success() {
     
     // Tombstone should exist in persistent storage
     let expected_hash = env.crypto().sha256(&grant_before_prune.to_xdr(&env));
-    let stored_tombstone: Bytes = env.storage().persistent().get(&StorageKey::Tombstone(grant_id)).expect("Tombstone should exist");
+    let contract_id = client.address.clone();
+    let stored_tombstone: Bytes = env.as_contract(&contract_id, || {
+        env.storage().persistent().get(&StorageKey::Tombstone(grant_id)).expect("Tombstone should exist")
+    });
     assert_eq!(stored_tombstone, expected_hash.into(), "Tombstone hash should match");
     
     // Relayer should receive bounty
