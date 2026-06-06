@@ -877,7 +877,6 @@ mod milestone_oracle_tests {
     }
 
     fn setup_grant(env: &Env, contract_id: &Address) -> (Address, Address) {
-        env.mock_all_auths();
         let admin = Address::generate(env);
         let recipient = Address::generate(env);
 
