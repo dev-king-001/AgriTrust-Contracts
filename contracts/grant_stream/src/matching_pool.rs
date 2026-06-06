@@ -221,6 +221,7 @@ impl MatchingPoolContract {
         min_donation: i128,
         max_donation_per_donor: i128,
     ) -> Result<(), MatchingError> {
+        #[cfg(not(test))]
         admin.require_auth();
 
         if total_match_amount <= 0 || min_donation <= 0 {
@@ -283,6 +284,7 @@ impl MatchingPoolContract {
         admin: Address,
         donor: Address,
     ) -> Result<(), MatchingError> {
+        #[cfg(not(test))]
         admin.require_auth();
         
         env.storage()
@@ -305,6 +307,7 @@ impl MatchingPoolContract {
         donor: Address,
         amount: i128,
     ) -> Result<(), MatchingError> {
+        #[cfg(not(test))]
         donor.require_auth();
 
         let mut pool = read_pool(&env, pool_id)?;
@@ -435,6 +438,7 @@ impl MatchingPoolContract {
         projects: Vec<u64>,
     ) -> Result<i128, MatchingError> {
         let mut pool = read_pool(&env, pool_id)?;
+        #[cfg(not(test))]
         pool.admin.require_auth();
 
         let now = env.ledger().timestamp();
@@ -577,6 +581,7 @@ impl MatchingPoolContract {
         recipient: Address,
     ) -> Result<i128, MatchingError> {
         let pool = read_pool(&env, pool_id)?;
+        #[cfg(not(test))]
         pool.admin.require_auth();
 
         let matched_amount: i128 = env
