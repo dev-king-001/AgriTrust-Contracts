@@ -24,7 +24,6 @@ fn create_test_env() -> (Env, Address) {
 
 fn with_contract<F: FnOnce()>(env: &Env, f: F) {
     let contract_id = env.register_contract(None, crate::GrantStreamContract);
-    env.mock_all_auths();
     env.as_contract(&contract_id, f);
 }
 
