@@ -20,6 +20,7 @@ fn test_initialize_council() {
         let retrieved = SecurityCouncil::get_council_members(env.clone()).unwrap();
         assert_eq!(retrieved.len(), 5);
     });
+}
 
 /// Test: Cannot initialize with wrong number of members
 #[test]
@@ -37,6 +38,7 @@ fn test_initialize_wrong_size() {
         let result = SecurityCouncil::initialize_council(env.clone(), members);
         assert_eq!(result, Err(SecurityCouncilError::InvalidCouncilSize));
     });
+}
 
 /// Test: Create pending action with 48-hour timelock
 #[test]
@@ -68,6 +70,7 @@ fn test_create_pending_action() {
         assert_eq!(action.action_type, ActionType::Clawback);
         assert_eq!(action.executable_at, action.created_at + 48 * 60 * 60);
     });
+}
 
 /// Test: Security Council can veto an action with 3 signatures
 #[test]
@@ -110,6 +113,7 @@ fn test_veto_action_with_threshold() {
         assert_eq!(action.status, ActionStatus::Vetoed);
         assert_eq!(SecurityCouncil::get_veto_count(env.clone(), action_id), 3);
     });
+}
 
 /// Test: Cannot execute vetoed action
 #[test]
@@ -143,6 +147,7 @@ fn test_cannot_execute_vetoed_action() {
         let result = SecurityCouncil::execute_action(env.clone(), action_id);
         assert_eq!(result, Err(SecurityCouncilError::ActionAlreadyVetoed));
     });
+}
 
 /// Test: Cannot execute before timelock expires
 #[test]
@@ -171,6 +176,7 @@ fn test_cannot_execute_before_timelock() {
         let result = SecurityCouncil::execute_action(env.clone(), action_id);
         assert_eq!(result, Err(SecurityCouncilError::TimelockNotExpired));
     });
+}
 
 /// Test: Can execute after timelock if not vetoed
 #[test]
@@ -210,6 +216,7 @@ fn test_execute_after_timelock() {
         let action = SecurityCouncil::get_pending_action(env.clone(), action_id).unwrap();
         assert_eq!(action.status, ActionStatus::Executed);
     });
+}
 
 /// Test: Rogue DAO attack scenario - malicious clawback is blocked
 #[test]
@@ -252,6 +259,7 @@ fn test_rogue_dao_attack_blocked() {
         let result = SecurityCouncil::execute_action(env.clone(), action_id);
         assert_eq!(result, Err(SecurityCouncilError::ActionAlreadyVetoed));
     });
+}
 
 /// Test: Multiple malicious actions blocked simultaneously
 #[test]
@@ -305,6 +313,7 @@ fn test_multiple_attacks_blocked() {
             assert_eq!(action.status, ActionStatus::Vetoed);
         }
     });
+}
 
 /// Test: Council rotation with 7-day timelock
 #[test]
@@ -340,6 +349,7 @@ fn test_council_rotation() {
         let current_members = SecurityCouncil::get_council_members(env.clone()).unwrap();
         assert_eq!(current_members.len(), 5);
     });
+}
 
 /// Test: Check rotation due after 1 year
 #[test]
@@ -363,6 +373,7 @@ fn test_rotation_due_check() {
         // Now rotation is due
         assert!(SecurityCouncil::is_rotation_due(env.clone()));
     });
+}
 
 /// Test: Non-council member cannot sign veto
 #[test]
@@ -391,6 +402,7 @@ fn test_non_member_cannot_veto() {
         let result = SecurityCouncil::sign_veto(env.clone(), action_id, non_member);
         assert_eq!(result, Err(SecurityCouncilError::NotCouncilMember));
     });
+}
 
 /// Test: Cannot sign veto twice
 #[test]
@@ -422,6 +434,7 @@ fn test_cannot_double_sign() {
         let result = SecurityCouncil::sign_veto(env.clone(), action_id, member);
         assert_eq!(result, Err(SecurityCouncilError::AlreadySigned));
     });
+}
 
 /// Test: Legitimate action can proceed if council doesn't veto
 #[test]
@@ -462,6 +475,7 @@ fn test_legitimate_action_proceeds() {
         let result = SecurityCouncil::execute_action(env.clone(), action_id);
         assert!(result.is_ok());
     });
+}
 
 // Helper function to create 5 council members
 fn create_council_members(env: &Env) -> Vec<Address> {
