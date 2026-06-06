@@ -1655,7 +1655,9 @@ impl GrantStreamContract {
     }
 
     pub fn get_grant(env: Env, grant_id: u64) -> Result<Grant, Error> {
-        read_grant(&env, grant_id)
+        let mut grant = read_grant(&env, grant_id)?;
+        settle_grant(&mut grant, env.ledger().timestamp())?;
+        Ok(grant)
     }
 
     pub fn claimable(env: Env, grant_id: u64) -> i128 {
@@ -2262,6 +2264,8 @@ impl GrantStreamContract {
         relayer.require_auth();
 
         let mut grant = read_grant(&env, grant_id)?;
+        // Save timestamp before settle_grant modifies last_update_ts
+        let last_update_ts = grant.last_update_ts;
         settle_grant(&mut grant, env.ledger().timestamp())?;
 
         // ── 1. Eligibility Validation ──────────────────────────────────────────
@@ -2278,7 +2282,7 @@ impl GrantStreamContract {
 
         // Must be older than 180 days since last update
         let now = env.ledger().timestamp();
-        if now < grant.last_update_ts.saturating_add(PRUNE_DELAY_SECONDS) {
+        if now < last_update_ts.saturating_add(PRUNE_DELAY_SECONDS) {
             return Err(Error::GrantNotPurgeable);
         }
 
